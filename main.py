@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-定时下载远程数据库文件并保留最近7天备份，支持自定义URL
+定时下载远程数据库文件并保留最近7天备份，支持自定义URL和本地保存目录
 """
 
 # 导入需要的模块
@@ -11,10 +11,8 @@ import time
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+from tkinter import filedialog
 import threading
-
-# 定义本地保存备份的目录
-BACKUP_DIR = "C:\\Users\\djc19\\OneDrive\\Sync\\WEBUI_DB"
 
 # 定义下载间隔，单位为秒 (4小时 = 4 * 60 * 60 秒)
 DOWNLOAD_INTERVAL = 4 * 60 * 60
@@ -25,15 +23,19 @@ KEEP_DAYS = 7
 # 用于存储用户输入的URL
 remote_file_url = None
 
+# 用于存储用户选择的本地保存目录
+backup_dir = None
+
+
 # 函数：下载文件
-def download_file(url):
+def download_file(url, backup_dir):
    try:
        response = requests.get(url, stream=True)
        response.raise_for_status()  # 检查请求是否成功
 
        # 创建备份目录，如果不存在
-       if not os.path.exists(BACKUP_DIR):
-           os.makedirs(BACKUP_DIR)
+       if not os.path.exists(backup_dir):
+           os.makedirs(backup_dir)
 
        # 获取当前日期和时间
        now = datetime.datetime.now()
@@ -41,7 +43,7 @@ def download_file(url):
 
        # 构建新文件名
        local_filename = f"webui_bk_{timestamp}.db"
-       local_filepath = os.path.join(BACKUP_DIR, local_filename)
+       local_filepath = os.path.join(backup_dir, local_filename)
 
        # 下载文件
        with open(local_filepath, 'wb') as f:
@@ -62,15 +64,15 @@ def download_file(url):
 
 
 # 函数：删除旧文件
-def delete_old_files():
+def delete_old_files(backup_dir):
    cutoff_date = datetime.datetime.now() - datetime.timedelta(days=KEEP_DAYS)
 
    deleted_files = []
 
-   if os.path.exists(BACKUP_DIR):
-        for filename in os.listdir(BACKUP_DIR):
+   if os.path.exists(backup_dir):
+        for filename in os.listdir(backup_dir):
             if filename.startswith("webui_bk_") and filename.endswith(".db"):
-                file_path = os.path.join(BACKUP_DIR, filename)
+                file_path = os.path.join(backup_dir, filename)
                 try:
                     file_date_str = filename[9:17] # 提取日期部分  webui_bk_20240126_183010
                     file_time_str = filename[18:24] # 提取时间部分
@@ -94,38 +96,44 @@ def delete_old_files():
        return False, "没有旧文件被删除"
 
 
-
 # 函数：主循环，定时下载文件和清理旧文件
 def main_loop():
-   global remote_file_url
+   global remote_file_url, backup_dir
 
    while True:
-       # 确保URL已经设置
+        # 确保URL和保存目录都已设置
        if not remote_file_url:
            log_text.insert(tk.END, f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - 请先输入远程文件地址\n")
            log_text.see(tk.END)
-           time.sleep(10)  # 等待10秒再检查
-           continue  # 跳过本次循环，等待URL设置
+           time.sleep(10)
+           continue
+       if not backup_dir:
+           log_text.insert(tk.END, f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - 请先选择本地保存目录\n")
+           log_text.see(tk.END)
+           time.sleep(10)
+           continue
 
        # 下载文件
-       status, message = download_file(remote_file_url)
+       status, message = download_file(remote_file_url,backup_dir)
        log_text.insert(tk.END, f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - 下载状态：{status}, 信息：{message}\n")
        log_text.see(tk.END)  # 滚动到文本框底部
 
        # 清理旧文件
-       status, message = delete_old_files()
+       status, message = delete_old_files(backup_dir)
        log_text.insert(tk.END, f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - 清理旧文件状态：{status}, 信息：{message}\n")
        log_text.see(tk.END)
 
        time.sleep(DOWNLOAD_INTERVAL)
 
 
-
 # 函数：启动下载和清理线程
 def start_download():
-   global remote_file_url
+   global remote_file_url, backup_dir
    if not remote_file_url:
        messagebox.showerror("错误", "请先输入远程文件地址!")
+       return
+   if not backup_dir:
+       messagebox.showerror("错误", "请先选择本地保存目录!")
        return
 
    download_button.config(state=tk.DISABLED)  # 禁用启动按钮
@@ -155,12 +163,23 @@ def save_url():
    messagebox.showinfo("提示", "远程文件地址已保存！")
 
 
+# 函数：打开文件夹选择窗口
+def choose_directory():
+   global backup_dir, backup_dir_label
+   directory = filedialog.askdirectory()
+   if directory:
+       backup_dir = directory
+       backup_dir_label.config(text=backup_dir) # 更新标签文本
+       messagebox.showinfo("提示", f"已选择保存目录: {backup_dir}")
+
+
 # 函数：启动GUI
 def start_gui():
    global log_text, download_button, stop_button, url_entry
+   global backup_dir_label
    window = tk.Tk()
    window.title("远程文件定时下载器")
-   window.geometry("600x450")  # 设置窗口大小
+   window.geometry("600x500")  # 设置窗口大小
 
    # 创建URL输入框和标签
    url_frame = ttk.Frame(window)
@@ -174,6 +193,17 @@ def start_gui():
 
    save_url_button = ttk.Button(url_frame, text="保存地址", command=save_url)
    save_url_button.pack(side=tk.LEFT, padx=5)
+
+   # 创建选择保存目录的按钮和标签
+   dir_frame = ttk.Frame(window)
+   dir_frame.pack(pady=10)
+
+   dir_button = ttk.Button(dir_frame, text="选择保存目录", command=choose_directory)
+   dir_button.pack(side=tk.LEFT, padx=5)
+
+   backup_dir_label = ttk.Label(dir_frame, text="未选择目录")
+   backup_dir_label.pack(side=tk.LEFT, padx=5)
+
 
    # 创建启动和停止按钮
    button_frame = ttk.Frame(window)

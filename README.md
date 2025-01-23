@@ -41,5 +41,8 @@ This project is designed to periodically download a remote database file and kee
 - **DOWNLOAD_INTERVAL**: Interval between downloads (in seconds).
 - **KEEP_DAYS**: Number of days to keep backups.
 
+## Download Executable
+You can download the executable file from the [GitHub Releases](https://github.com/SamDu1998/WebUI_BCK/releases) page.
+
 ## License
 This project is licensed under the MIT License.
